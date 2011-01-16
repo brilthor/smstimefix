@@ -57,6 +57,11 @@ public class FixService extends Service {
 	public static long lastSMSId = 0;			// the ID of the last message we've altered
 	public static boolean running = false;		// is the service running?
 	
+	
+
+	//Set what we want the magic to be -- John
+	final private long MAGIC = 337;
+	
 	@Override
 	public IBinder onBind(Intent intent) {
 		return null;
@@ -159,6 +164,34 @@ public class FixService extends Service {
 	        	// grab its ID
 	        	id = c.getLong(c.getColumnIndex("_id"));
 	        }
+	        
+	        /**
+	         * the issue that is being faced is that the message that lastid
+	         * refers to may have been deleted without our knowledge.  so we test for
+	         * the id and the magic to see if it is the same, if not we keep going
+	         * until we find the magic on something we have modified before which
+	         * will let us know that there are no new messages below it since
+	         * android chooses highest + 1 for new ids
+	         * 
+	         * we can use the last three digits of the long which represent sub-second timeframes
+	         * to store this value as (at least on my phone) these are set to 000, and even if they
+	         * are not it should not change what is displayed on the phone
+	         */
+	        if (id != oldLastChanged || (c.getLong(c.getColumnIndex("date")) % 1000) != MAGIC ){
+	        	while ((c.getLong(c.getColumnIndex("date")) % 1000) != MAGIC ){
+	        		//loop until we find magic
+	        		alterMessage(c.getLong(c.getColumnIndex("_id")));
+	        		
+	        		if (c.isLast()) {
+			        	break;
+			        }else{
+		        		c.moveToNext();			        	
+			        }
+	        	}
+	        	
+	        }
+	        
+	        
         } else {
         	// there aren't any messages, reset the id counter
         	lastSMSId = -1;
@@ -211,7 +244,14 @@ public class FixService extends Service {
         
         // update the message with the new time stamp
         ContentValues values = new ContentValues();
-        values.put("date", date.getTime());
+        
+        //Set the magic so we know that it's been altered -- John
+        //the magic will need to be set on messages that we don't want to touch as well
+        //I haven't done anything about that
+        long timeval = date.getTime();
+        timeval = timeval + MAGIC - (timeval % 1000);
+        
+        values.put("date", timeval);
         getContentResolver().update(URI, values, "_id = " + id, null);
 	}
 	
